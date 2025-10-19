@@ -2,16 +2,32 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../../database.sqlite');
+// Lazy database connection - initialized on first use or explicit call
+let db: Database.Database | null = null;
+let isInitialized = false;
 
-// Initialize database connection
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL'); // Write-Ahead Logging for better performance
+function getDb(): Database.Database {
+  if (!db) {
+    throw new Error('Database not initialized. Call initializeDatabase() first.');
+  }
+  return db;
+}
 
-console.log(`📁 Database connected: ${DB_PATH}`);
+// Initialize database connection and schema
+export function initializeDatabase(dbPath?: string): void {
+  if (isInitialized && db) {
+    console.log('⚠️  Database already initialized');
+    return;
+  }
 
-// Initialize schema
-export function initializeDatabase(): void {
+  const DB_PATH = dbPath || process.env.DATABASE_PATH || path.join(__dirname, '../../database.sqlite');
+
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL'); // Write-Ahead Logging for better performance
+  isInitialized = true;
+
+  console.log(`📁 Database connected: ${DB_PATH}`);
+
   const schemaPath = path.join(__dirname, '../db/schema.sql');
 
   if (fs.existsSync(schemaPath)) {
@@ -24,9 +40,18 @@ export function initializeDatabase(): void {
   }
 }
 
+// Reset database connection (for testing)
+export function resetDatabase(): void {
+  if (db) {
+    db.close();
+  }
+  db = null;
+  isInitialized = false;
+}
+
 // Create tables inline if schema.sql doesn't exist
 function createTables(): void {
-  db.exec(`
+  getDb().exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
@@ -41,12 +66,17 @@ function createTables(): void {
       user_email TEXT NOT NULL,
       confirmation_number TEXT,
       flight_date DATE NOT NULL,
+      departure_time_local TEXT,
+      arrival_time_local TEXT,
       departure_airport TEXT NOT NULL,
       arrival_airport TEXT NOT NULL,
       departure_city TEXT,
       arrival_city TEXT,
       airline TEXT,
       flight_number TEXT,
+      cabin TEXT,
+      passenger_names TEXT,
+      notes TEXT,
       departure_lat REAL,
       departure_lng REAL,
       arrival_lat REAL,
@@ -70,7 +100,7 @@ export interface User {
 }
 
 export function createUser(user: User): User {
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     INSERT INTO users (email, google_access_token, google_refresh_token)
     VALUES (?, ?, ?)
   `);
@@ -85,17 +115,17 @@ export function createUser(user: User): User {
 }
 
 export function getUserByEmail(email: string): User | undefined {
-  const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
+  const stmt = getDb().prepare('SELECT * FROM users WHERE email = ?');
   return stmt.get(email) as User | undefined;
 }
 
 export function getUserById(id: number): User | undefined {
-  const stmt = db.prepare('SELECT * FROM users WHERE id = ?');
+  const stmt = getDb().prepare('SELECT * FROM users WHERE id = ?');
   return stmt.get(id) as User | undefined;
 }
 
 export function updateUserTokens(email: string, accessToken: string, refreshToken: string): void {
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     UPDATE users
     SET google_access_token = ?,
         google_refresh_token = ?,
@@ -111,12 +141,17 @@ export interface Flight {
   user_email: string;
   confirmation_number?: string;
   flight_date: string;
+  departure_time_local?: string;
+  arrival_time_local?: string;
   departure_airport: string;
   arrival_airport: string;
   departure_city?: string;
   arrival_city?: string;
   airline?: string;
   flight_number?: string;
+  cabin?: string;
+  passenger_names?: string; // JSON string array
+  notes?: string;
   departure_lat?: number;
   departure_lng?: number;
   arrival_lat?: number;
@@ -126,26 +161,32 @@ export interface Flight {
 }
 
 export function createFlight(flight: Flight): Flight {
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     INSERT INTO flights (
       user_email, confirmation_number, flight_date,
+      departure_time_local, arrival_time_local,
       departure_airport, arrival_airport, departure_city, arrival_city,
-      airline, flight_number,
+      airline, flight_number, cabin, passenger_names, notes,
       departure_lat, departure_lng, arrival_lat, arrival_lng,
       raw_email_snippet
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = stmt.run(
     flight.user_email,
     flight.confirmation_number || null,
     flight.flight_date,
+    flight.departure_time_local || null,
+    flight.arrival_time_local || null,
     flight.departure_airport,
     flight.arrival_airport,
     flight.departure_city || null,
     flight.arrival_city || null,
     flight.airline || null,
     flight.flight_number || null,
+    flight.cabin || null,
+    flight.passenger_names || null,
+    flight.notes || null,
     flight.departure_lat || null,
     flight.departure_lng || null,
     flight.arrival_lat || null,
@@ -157,17 +198,17 @@ export function createFlight(flight: Flight): Flight {
 }
 
 export function getFlightById(id: number): Flight | undefined {
-  const stmt = db.prepare('SELECT * FROM flights WHERE id = ?');
+  const stmt = getDb().prepare('SELECT * FROM flights WHERE id = ?');
   return stmt.get(id) as Flight | undefined;
 }
 
 export function getFlightsByUser(userEmail: string): Flight[] {
-  const stmt = db.prepare('SELECT * FROM flights WHERE user_email = ? ORDER BY flight_date DESC');
+  const stmt = getDb().prepare('SELECT * FROM flights WHERE user_email = ? ORDER BY flight_date DESC');
   return stmt.all(userEmail) as Flight[];
 }
 
 export function getFlightsByDateRange(userEmail: string, startDate: string, endDate: string): Flight[] {
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     SELECT * FROM flights
     WHERE user_email = ? AND flight_date BETWEEN ? AND ?
     ORDER BY flight_date DESC
@@ -195,7 +236,7 @@ export function getAirportVisits(userEmail: string, year?: number): any[] {
     query += ` AND strftime('%Y', flight_date) = '${year}'`;
   }
 
-  const stmt = db.prepare(query);
+  const stmt = getDb().prepare(query);
   return stmt.all(userEmail, userEmail) as any[];
 }
 
@@ -208,13 +249,13 @@ export function getTotalFlights(userEmail: string, year?: number): number {
     params.push(year.toString());
   }
 
-  const stmt = db.prepare(query);
+  const stmt = getDb().prepare(query);
   const result = stmt.get(...params) as { count: number };
   return result.count;
 }
 
 export function getFlightsByAirport(userEmail: string, airportCode: string): Flight[] {
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     SELECT * FROM flights
     WHERE user_email = ? AND (departure_airport = ? OR arrival_airport = ?)
     ORDER BY flight_date DESC
@@ -223,7 +264,7 @@ export function getFlightsByAirport(userEmail: string, airportCode: string): Fli
 }
 
 export function getAirlineStats(userEmail: string): any[] {
-  const stmt = db.prepare(`
+  const stmt = getDb().prepare(`
     SELECT airline, COUNT(*) as count
     FROM flights
     WHERE user_email = ? AND airline IS NOT NULL
@@ -233,5 +274,5 @@ export function getAirlineStats(userEmail: string): any[] {
   return stmt.all(userEmail) as any[];
 }
 
-// Export database instance for custom queries if needed
-export { db };
+// Export database getter for custom queries if needed
+export { getDb as db };

@@ -8,6 +8,7 @@ import session from 'express-session';
 import { initializeDatabase } from './services/db.service';
 import { airportService } from './services/airport.service';
 import authRoutes from './routes/auth.routes';
+import chatRoutes from './routes/chat.routes';
 
 // Initialize database
 initializeDatabase();
@@ -44,7 +45,7 @@ app.get('/health', (req, res) => {
 // Routes
 app.use('/auth', authRoutes);
 // app.use('/flights', flightsRoutes);
-// app.use('/chat', chatRoutes);
+app.use('/chat', chatRoutes);
 
 // Start server
 app.listen(PORT, () => {

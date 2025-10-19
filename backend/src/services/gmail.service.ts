@@ -5,6 +5,8 @@ interface GmailMessage {
   id: string;
   snippet: string;
   internalDate: string;
+  subject?: string;
+  sentDate?: string;
 }
 
 class GmailService {
@@ -105,10 +107,23 @@ class GmailService {
             format: 'full',
           });
 
+          // Extract subject from headers
+          const headers = detail.data.payload?.headers || [];
+          const subjectHeader = headers.find(h => h.name?.toLowerCase() === 'subject');
+          const subject = subjectHeader?.value || '';
+
+          // Convert internalDate (Unix timestamp in ms) to ISO string
+          const internalDate = detail.data.internalDate;
+          const sentDate = internalDate
+            ? new Date(parseInt(internalDate)).toISOString()
+            : '';
+
           return {
             id: detail.data.id!,
             snippet: detail.data.snippet || '',
             internalDate: detail.data.internalDate || '',
+            subject,
+            sentDate,
           };
         })
       );
