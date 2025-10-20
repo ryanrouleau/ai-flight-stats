@@ -48,7 +48,7 @@ router.get('/google/callback', async (req: Request, res: Response) => {
   if (error) {
     console.error('OAuth error:', error);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    return res.redirect(`${frontendUrl}?error=auth_failed`);
+    return res.redirect(`${frontendUrl}/auth/callback?error=auth_failed`);
   }
 
   if (!code || typeof code !== 'string') {
@@ -86,13 +86,13 @@ router.get('/google/callback', async (req: Request, res: Response) => {
     // Store user email in session
     req.session.userEmail = userEmail;
 
-    // Redirect to frontend
+    // Redirect to frontend callback page
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}?auth=success`);
+    res.redirect(`${frontendUrl}/auth/callback`);
   } catch (error) {
     console.error('Error handling OAuth callback:', error);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}?error=auth_failed`);
+    res.redirect(`${frontendUrl}/auth/callback?error=auth_failed`);
   }
 });
 
@@ -106,7 +106,9 @@ router.get('/status', (req: Request, res: Response) => {
     if (user) {
       return res.json({
         authenticated: true,
-        email: user.email,
+        user: {
+          email: user.email,
+        },
       });
     }
   }
