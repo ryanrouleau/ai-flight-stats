@@ -17,7 +17,7 @@ export interface Flight {
   departure_lng?: number;
   arrival_lat?: number;
   arrival_lng?: number;
-  raw_email_snippet?: string;
+  raw_email_content?: string;
   created_at: string;
 }
 
@@ -56,6 +56,11 @@ export interface AuthStatus {
 export interface ScanResponse {
   count: number;
   message: string;
+}
+
+export interface FlightsResponse {
+  count: number;
+  flights: Flight[];
 }
 
 class ApiClient {
@@ -104,8 +109,8 @@ class ApiClient {
     return this.request<ScanResponse>('/flights/scan', { method: 'POST' });
   }
 
-  async getFlights(): Promise<Flight[]> {
-    return this.request<Flight[]>('/flights');
+  async getFlights(): Promise<FlightsResponse> {
+    return this.request<FlightsResponse>('/flights');
   }
 
   async getGlobeData(): Promise<GlobeData> {

@@ -86,9 +86,9 @@ router.post('/scan', requireAuth, async (req: Request, res: Response) => {
           departure_lng: flight.departureLng,
           arrival_lat: flight.arrivalLat,
           arrival_lng: flight.arrivalLng,
-          raw_email_snippet: emailInputs.find((e) =>
+          raw_email_content: emailInputs.find((e) =>
             e.content.includes(flight.confirmationNumber || '')
-          )?.snippet,
+          )?.content,
         });
         savedFlights.push(savedFlight);
       } catch (error: any) {

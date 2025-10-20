@@ -200,7 +200,7 @@ export async function parseFlightEmail(email: EmailInput): Promise<ParsedFlight[
 Rules:
 - If a field isn't present, return null
 - Use the departure airport's local calendar day for flightDateLocal
-- Do not guess airport codes; only use explicit codes or well-known city-airport pairs
+- If an airport code is not found, use the best guess for the city
 - Extract ALL flight segments including connections and round trips
 - Use 24-hour time format (HH:mm) for times
 
@@ -216,7 +216,7 @@ ${cleanedContent}
 Extract all flight information from this email.`;
 
     const response = await getOpenAI().beta.chat.completions.parse({
-      model: process.env.OPENAI_MODEL ?? 'gpt-4o-2024-08-06',
+      model: process.env.OPENAI_MODEL ?? 'gpt-5-mini',
       messages: [
         {
           role: 'system',
@@ -229,7 +229,7 @@ Extract all flight information from this email.`;
         },
       ],
       response_format: zodResponseFormat(FlightExtractionSchema, 'flight_extraction'),
-      temperature: 0.1,
+      temperature: 1,
     });
 
     const parsed = response.choices[0]?.message?.parsed;

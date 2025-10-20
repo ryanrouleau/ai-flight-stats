@@ -89,7 +89,7 @@ class GmailService {
       const response = await gmail.users.messages.list({
         userId: 'me',
         q: query,
-        maxResults: 50, // Limit to 50 for POC
+        maxResults: 10, // Limit to 50 for POC
       });
 
       const messages = response.data.messages || [];

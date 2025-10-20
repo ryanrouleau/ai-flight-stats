@@ -158,10 +158,10 @@ describe('Chat Service - Tool Calling', () => {
     );
 
     console.log('\n📨 Q: How many total flights do I have?');
-    console.log(`🤖 A: ${response.message}`);
+    console.log(`🤖 A: ${response.message.content}`);
     console.log(`🔧 Tools: ${response.toolCalls?.map(t => t.tool).join(', ') || 'none'}\n`);
 
-    assert.ok(response.message, 'Should return a message');
+    assert.ok(response.message.content, 'Should return a message');
     assert.ok(response.toolCalls && response.toolCalls.length > 0, 'Should have tool calls');
 
     // Check that getTotalFlights was called
@@ -182,10 +182,10 @@ describe('Chat Service - Tool Calling', () => {
     );
 
     console.log('\n📨 Q: What flights did I take in 2024?');
-    console.log(`🤖 A: ${response.message}`);
+    console.log(`🤖 A: ${response.message.content}`);
     console.log(`🔧 Tools: ${response.toolCalls?.map(t => t.tool).join(', ') || 'none'}\n`);
 
-    assert.ok(response.message, 'Should return a message');
+    assert.ok(response.message.content, 'Should return a message');
     assert.ok(response.toolCalls && response.toolCalls.length > 0, 'Should have tool calls');
 
     // Should call getFlightsByDateRange
@@ -207,10 +207,10 @@ describe('Chat Service - Tool Calling', () => {
     );
 
     console.log('\n📨 Q: What airports have I visited?');
-    console.log(`🤖 A: ${response.message}`);
+    console.log(`🤖 A: ${response.message.content}`);
     console.log(`🔧 Tools: ${response.toolCalls?.map(t => t.tool).join(', ') || 'none'}\n`);
 
-    assert.ok(response.message, 'Should return a message');
+    assert.ok(response.message.content, 'Should return a message');
     assert.ok(response.toolCalls && response.toolCalls.length > 0, 'Should have tool calls');
 
     // Should call getAirportVisits
@@ -233,10 +233,10 @@ describe('Chat Service - Tool Calling', () => {
     );
 
     console.log('\n📨 Q: Which airlines have I flown with the most?');
-    console.log(`🤖 A: ${response.message}`);
+    console.log(`🤖 A: ${response.message.content}`);
     console.log(`🔧 Tools: ${response.toolCalls?.map(t => t.tool).join(', ') || 'none'}\n`);
 
-    assert.ok(response.message, 'Should return a message');
+    assert.ok(response.message.content, 'Should return a message');
     assert.ok(response.toolCalls && response.toolCalls.length > 0, 'Should have tool calls');
 
     // Should call getAirlineStats
@@ -263,10 +263,10 @@ describe('Chat Service - Tool Calling', () => {
     );
 
     console.log('\n📨 Q: What flights did I have from JFK?');
-    console.log(`🤖 A: ${response.message}`);
+    console.log(`🤖 A: ${response.message.content}`);
     console.log(`🔧 Tools: ${response.toolCalls?.map(t => t.tool).join(', ') || 'none'}\n`);
 
-    assert.ok(response.message, 'Should return a message');
+    assert.ok(response.message.content, 'Should return a message');
     assert.ok(response.toolCalls && response.toolCalls.length > 0, 'Should have tool calls');
 
     // Should call getFlightsByAirport
@@ -291,7 +291,7 @@ describe('Chat Service - Tool Calling', () => {
     );
 
     console.log('\n📨 Q1: How many flights did I take in 2024?');
-    console.log(`🤖 A1: ${response1.message}\n`);
+    console.log(`🤖 A1: ${response1.message.content}\n`);
 
     // Second message with history - should understand "them" refers to 2024 flights
     const response2 = await chat(
@@ -299,19 +299,19 @@ describe('Chat Service - Tool Calling', () => {
         message: 'Which airlines operated them?',
         history: [
           { role: 'user', content: 'How many flights did I take in 2024?' },
-          { role: 'assistant', content: response1.message },
+          { role: 'assistant', content: response1.message.content },
         ],
       },
       TEST_USER_EMAIL
     );
 
     console.log('📨 Q2: Which airlines operated them?');
-    console.log(`🤖 A2: ${response2.message}\n`);
+    console.log(`🤖 A2: ${response2.message.content}\n`);
 
-    assert.ok(response2.message, 'Should return a message');
+    assert.ok(response2.message.content, 'Should return a message');
     // The assistant should understand context and query 2024 flights
     assert.ok(
-      response2.message.includes('United') || response2.message.includes('Delta'),
+      response2.message.content.includes('United') || response2.message.content.includes('Delta'),
       'Should mention airlines from 2024 flights'
     );
   });
@@ -328,10 +328,10 @@ describe('Chat Service - Tool Calling', () => {
     );
 
     console.log('\n📨 Q: How many flights did I take in 2023?');
-    console.log(`🤖 A: ${response.message}`);
+    console.log(`🤖 A: ${response.message.content}`);
     console.log(`🔧 Tools: ${response.toolCalls?.map(t => t.tool).join(', ') || 'none'}\n`);
 
-    assert.ok(response.message, 'Should return a message');
+    assert.ok(response.message.content, 'Should return a message');
 
     // Check if the right year was queried
     const totalTool = response.toolCalls?.find(tc => tc.tool === 'getTotalFlights');

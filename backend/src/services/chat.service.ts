@@ -15,6 +15,31 @@ function getOpenAI(): OpenAI {
   return openai;
 }
 
+// Shared defaults for chat completion requests
+const CHAT_COMPLETION_DEFAULTS = {
+  model: 'gpt-5-mini',
+  tools: flightTools,
+  tool_choice: 'auto' as const,
+  temperature: 1,
+  reasoning_effort: 'low'
+} satisfies Omit<OpenAI.ChatCompletionCreateParams, 'messages'>;
+
+const SYSTEM_PROMPT = `You are a friendly, helpful, casual, upbeat assistant that helps users query their flight history.
+You have access to tools that can retrieve flight data from the user's database.
+Be conversational, friendly, and concise in your responses.
+
+When displaying flight information:
+- For a single flight: Use a clean bulleted list with **bold labels** (e.g., **Date:** )
+- For multiple flights: Use a markdown table with columns: Date | Airline | Flight | Route | Times | Cabin | Confirmation
+- Format dates so they're human readable
+- Format routes as: Origin → Destination (CODE → CODE)
+- Always bold field labels like **Date:**, **Flight:**, **Route:**, **Times:**, **Cabin:**, **Confirmation:**, **Airline:** for easy scanning
+
+Today's date is ${new Date().toISOString().split('T')[0]}.
+
+ONLY offer follow ups that can be completed with the limited list of tools available.
+`
+
 /**
  * Execute a tool function call
  */
@@ -79,7 +104,7 @@ export interface ChatRequest {
 }
 
 export interface ChatResponse {
-  message: string;
+  message: ChatMessage;
   toolCalls?: Array<{
     tool: string;
     arguments: any;
@@ -97,11 +122,7 @@ export async function chat(
   const messages: ChatCompletionMessageParam[] = [
     {
       role: 'system',
-      content: `You are a helpful assistant that helps users query their flight history.
-You have access to tools that can retrieve flight data from the user's database.
-Be conversational, friendly, and concise in your responses.
-When displaying flight information, format it in a clear, readable way.
-Today's date is ${new Date().toISOString().split('T')[0]}.`,
+      content: SYSTEM_PROMPT,
     },
   ];
 
@@ -130,11 +151,8 @@ Today's date is ${new Date().toISOString().split('T')[0]}.`,
 
   // Tool calling loop - continue until no more tool calls
   let response = await getOpenAI().chat.completions.create({
-    model: process.env.OPENAI_MODEL ?? 'gpt-4o-2024-08-06',
+    ...CHAT_COMPLETION_DEFAULTS,
     messages,
-    tools: flightTools,
-    tool_choice: 'auto',
-    temperature: 0.7,
   });
 
   let iterations = 0;
@@ -179,21 +197,21 @@ Today's date is ${new Date().toISOString().split('T')[0]}.`,
 
     // Get next response from OpenAI
     response = await getOpenAI().chat.completions.create({
-      model: process.env.OPENAI_MODEL ?? 'gpt-4o-2024-08-06',
+      ...CHAT_COMPLETION_DEFAULTS,
       messages,
-      tools: flightTools,
-      tool_choice: 'auto',
-      temperature: 0.7,
     });
   }
 
   // Get final assistant message
-  const finalMessage = response.choices[0]?.message?.content ?? 'Sorry, I could not process your request.';
+  const finalMessageContent = response.choices[0]?.message?.content ?? 'Sorry, I could not process your request.';
 
-  console.log(`\n✅ Chat response: "${finalMessage.substring(0, 100)}..."\n`);
+  console.log(`\n✅ Chat response: "${finalMessageContent.substring(0, 100)}..."\n`);
 
   return {
-    message: finalMessage,
+    message: {
+      role: 'assistant',
+      content: finalMessageContent,
+    },
     toolCalls: toolCallsInfo.length > 0 ? toolCallsInfo : undefined,
   };
 }

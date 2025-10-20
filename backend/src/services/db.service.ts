@@ -81,7 +81,7 @@ function createTables(): void {
       departure_lng REAL,
       arrival_lat REAL,
       arrival_lng REAL,
-      raw_email_snippet TEXT,
+      raw_email_content TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_email) REFERENCES users(email)
     );
@@ -156,7 +156,7 @@ export interface Flight {
   departure_lng?: number;
   arrival_lat?: number;
   arrival_lng?: number;
-  raw_email_snippet?: string;
+  raw_email_content?: string;
   created_at?: string;
 }
 
@@ -168,7 +168,7 @@ export function createFlight(flight: Flight): Flight {
       departure_airport, arrival_airport, departure_city, arrival_city,
       airline, flight_number, cabin, passenger_names, notes,
       departure_lat, departure_lng, arrival_lat, arrival_lng,
-      raw_email_snippet
+      raw_email_content
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
@@ -191,7 +191,7 @@ export function createFlight(flight: Flight): Flight {
     flight.departure_lng || null,
     flight.arrival_lat || null,
     flight.arrival_lng || null,
-    flight.raw_email_snippet || null
+    flight.raw_email_content || null
   );
 
   return getFlightById(result.lastInsertRowid as number)!;

@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS flights (
   departure_lng REAL,
   arrival_lat REAL,
   arrival_lng REAL,
-  raw_email_snippet TEXT,
+  raw_email_content TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_email) REFERENCES users(email)
 );
