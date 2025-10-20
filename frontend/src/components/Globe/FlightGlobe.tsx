@@ -344,7 +344,7 @@ export function FlightGlobe({
           <Chip
             label={`Filtered: ${selectedAirport}`}
             onDelete={handleClearFilter}
-            color="primary"
+            color="default"
             sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)' }}
           />
         </Box>

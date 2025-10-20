@@ -17,14 +17,20 @@ import { apiClient, type ChatMessage, type ChatResponse } from '../../services/a
 interface ChatInterfaceProps {
   onChatResponse?: (response: ChatResponse) => void;
   onScanComplete?: () => void;
+  onClearChat?: () => void;
 }
 
-export function ChatInterface({ onChatResponse, onScanComplete }: ChatInterfaceProps) {
+export function ChatInterface({ onChatResponse, onScanComplete, onClearChat }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const handleClearChat = () => {
+    setMessages([]);
+    onClearChat?.();
+  };
 
   const handleSendMessage = async (message: string) => {
     const userMessage: ChatMessage = {
@@ -89,14 +95,24 @@ export function ChatInterface({ onChatResponse, onScanComplete }: ChatInterfaceP
             Ask questions about your flight history
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={isScanning ? <CircularProgress size={20} color="inherit" /> : <EmailIcon />}
-          onClick={handleScanEmails}
-          disabled={isScanning}
-        >
-          {isScanning ? 'Scanning...' : 'Scan Emails'}
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Button
+            variant="contained"
+            startIcon={isScanning ? <CircularProgress size={20} color="inherit" /> : <EmailIcon />}
+            onClick={handleScanEmails}
+            disabled={isScanning}
+          >
+            {isScanning ? 'Scanning...' : 'Scan Emails'}
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={handleClearChat}
+            disabled={isLoading || isScanning || messages.length === 0}
+            sx={{ ml: 2 }}
+          >
+            Clear Chat
+          </Button>
+        </Box>
       </Paper>
 
       <Paper

@@ -4,7 +4,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../contexts/AuthContext';
 import { ChatInterface } from '../components/Chat/ChatInterface';
 import { FlightGlobe, type GlobeFocus } from '../components/Globe/FlightGlobe';
-import { type ChatResponse, type ToolCall, type Flight } from '../services/api';
+import { type ApiGlobeFocus, type ChatResponse, type ToolCall, type Flight } from '../services/api';
 
 function isFlightResult(candidate: unknown): candidate is Flight {
   if (!candidate || typeof candidate !== 'object') {
@@ -37,9 +37,41 @@ function extractAirportCode(candidate: unknown): string | null {
   return null;
 }
 
-function extractGlobeFocus(toolCalls?: ToolCall[]): GlobeFocus {
-  if (!toolCalls || toolCalls.length === 0) {
+function convertApiGlobeFocus(globeFocus?: ApiGlobeFocus): GlobeFocus | null {
+  if (!globeFocus || typeof globeFocus.mode !== 'string') {
+    return null;
+  }
+
+  if (globeFocus.mode === 'all') {
     return { type: 'all' };
+  }
+
+  if (globeFocus.mode === 'flights' && Array.isArray(globeFocus.flights) && globeFocus.flights.length > 0) {
+    return {
+      type: 'flights',
+      flights: globeFocus.flights,
+    };
+  }
+
+  if (globeFocus.mode === 'airports' && Array.isArray(globeFocus.airports) && globeFocus.airports.length > 0) {
+    const codes = globeFocus.airports
+      .map((airport) => (airport?.code ? airport.code.toUpperCase() : null))
+      .filter((code): code is string => !!code);
+
+    if (codes.length > 0) {
+      return {
+        type: 'airports',
+        airportCodes: codes,
+      };
+    }
+  }
+
+  return null;
+}
+
+function extractGlobeFocusFromTools(toolCalls?: ToolCall[]): GlobeFocus | null {
+  if (!toolCalls || toolCalls.length === 0) {
+    return null;
   }
 
   const flights: Flight[] = [];
@@ -95,6 +127,20 @@ function extractGlobeFocus(toolCalls?: ToolCall[]): GlobeFocus {
     };
   }
 
+  return null;
+}
+
+function determineGlobeFocus(response: ChatResponse): GlobeFocus {
+  const fromApi = convertApiGlobeFocus(response.globeFocus);
+  if (fromApi) {
+    return fromApi;
+  }
+
+  const fromTools = extractGlobeFocusFromTools(response.toolCalls);
+  if (fromTools) {
+    return fromTools;
+  }
+
   return { type: 'all' };
 }
 
@@ -109,7 +155,7 @@ export function DashboardPage() {
   };
 
   const handleChatResponse = (response: ChatResponse) => {
-    setGlobeFocus(extractGlobeFocus(response.toolCalls));
+    setGlobeFocus(determineGlobeFocus(response));
   };
 
   const handleScanComplete = () => {
@@ -117,12 +163,16 @@ export function DashboardPage() {
     setGlobeRefreshKey((prev) => prev + 1);
   };
 
+  const handleClearChat = () => {
+    setGlobeFocus({ type: 'all' });
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <AppBar position="static">
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            AI Flight Stats
+            Flight Assistant
           </Typography>
           {user && (
             <Typography variant="body2" sx={{ mr: 2 }}>
@@ -141,6 +191,7 @@ export function DashboardPage() {
             <ChatInterface
               onChatResponse={handleChatResponse}
               onScanComplete={handleScanComplete}
+              onClearChat={handleClearChat}
             />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>

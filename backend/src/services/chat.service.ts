@@ -41,6 +41,17 @@ Flight tool notes:
 
 Today's date is ${new Date().toISOString().split('T')[0]}.
 
+After your conversational answer, append a <globe_focus>...</globe_focus> block containing JSON that describes what should be highlighted on the globe visualization. The JSON must have this shape:
+{
+  "mode": "all" | "flights" | "airports",
+  "flights": [SanitizedFlight, ...],
+  "airports": [{"code": "SFO", "city": "San Francisco"}, ...]
+}
+- Use "all" when the default full dataset should be shown.
+- Use "flights" when highlighting specific flights; include the exact sanitized flight objects from the latest tool results that match the user's reply (include coordinates if available).
+- Use "airports" when only airport points should be highlighted; include airport codes and optional city names.
+- Do not include any extra text inside the <globe_focus> block and ensure the JSON is valid.
+
 ONLY offer follow ups that can be completed with the limited list of tools available.
 `
 
@@ -49,6 +60,113 @@ type SanitizedFlight = Omit<db.Flight, 'raw_email_content'> & {
   emailSentDate?: string;
   emailSubject?: string;
 };
+
+type GlobeFocusMode = 'all' | 'flights' | 'airports';
+
+export interface GlobeFocusPayload {
+  mode: GlobeFocusMode;
+  flights?: SanitizedFlight[];
+  airports?: Array<{ code: string; city?: string | null }>;
+}
+
+function isValidGlobeFocusMode(mode: unknown): mode is GlobeFocusMode {
+  return mode === 'all' || mode === 'flights' || mode === 'airports';
+}
+
+function sanitizeAirportEntry(entry: any): { code: string; city?: string | null } | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const code = typeof entry.code === 'string'
+    ? entry.code
+    : typeof entry.airport === 'string'
+      ? entry.airport
+      : null;
+
+  if (!code) {
+    return null;
+  }
+
+  const city =
+    typeof entry.city === 'string'
+      ? entry.city
+      : typeof entry.name === 'string'
+        ? entry.name
+        : undefined;
+
+  return { code, city: city ?? null };
+}
+
+function sanitizeFlightEntry(entry: any): SanitizedFlight | null {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const flight = entry as Partial<SanitizedFlight>;
+
+  if (
+    typeof flight.departure_airport !== 'string' ||
+    typeof flight.arrival_airport !== 'string' ||
+    typeof flight.flight_date !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    ...flight,
+  } as SanitizedFlight;
+}
+
+function parseGlobeFocusBlock(content: string): { cleanedContent: string; focus?: GlobeFocusPayload } {
+  const focusRegex = /<globe_focus>([\s\S]*?)<\/globe_focus>/i;
+  const match = focusRegex.exec(content);
+
+  if (!match) {
+    return { cleanedContent: content };
+  }
+
+  const jsonText = match[1].trim();
+  let focus: GlobeFocusPayload | undefined;
+
+  try {
+    const parsed = JSON.parse(jsonText);
+
+    if (parsed && typeof parsed === 'object' && isValidGlobeFocusMode(parsed.mode)) {
+      const sanitized: GlobeFocusPayload = { mode: parsed.mode };
+
+      if (parsed.mode === 'flights' && Array.isArray(parsed.flights)) {
+        const flights = parsed.flights
+          .map(sanitizeFlightEntry)
+          .filter((flight): flight is SanitizedFlight => flight !== null);
+        if (flights.length > 0) {
+          sanitized.flights = flights;
+        }
+      }
+
+      if (parsed.mode === 'airports' && Array.isArray(parsed.airports)) {
+        const airports = parsed.airports
+          .map(sanitizeAirportEntry)
+          .filter((airport): airport is { code: string; city?: string | null } => airport !== null)
+          .map((airport) => ({
+            code: airport.code.toUpperCase(),
+            city: airport.city ?? null,
+          }));
+        if (airports.length > 0) {
+          sanitized.airports = airports;
+        }
+      }
+
+      focus = sanitized;
+    }
+  } catch (error) {
+    console.warn('⚠️  Failed to parse globe focus JSON:', error);
+  }
+
+  const cleanedContent = `${content.slice(0, match.index)}${content.slice(match.index + match[0].length)}`.trim();
+
+  return { cleanedContent, focus };
+}
 
 function sanitizeFlightRecord(flight: db.Flight): SanitizedFlight {
   const { raw_email_content, ...safeFlight } = flight;
@@ -142,6 +260,7 @@ export interface ChatResponse {
     arguments: any;
     result: any;
   }>;
+  globeFocus?: GlobeFocusPayload;
 }
 
 export async function chat(
@@ -235,7 +354,8 @@ export async function chat(
   }
 
   // Get final assistant message
-  const finalMessageContent = response.choices[0]?.message?.content ?? 'Sorry, I could not process your request.';
+  const finalMessageRaw = response.choices[0]?.message?.content ?? 'Sorry, I could not process your request.';
+  const { cleanedContent: finalMessageContent, focus: globeFocus } = parseGlobeFocusBlock(finalMessageRaw);
 
   console.log(`\n✅ Chat response: "${finalMessageContent.substring(0, 100)}..."\n`);
 
@@ -245,5 +365,6 @@ export async function chat(
       content: finalMessageContent,
     },
     toolCalls: toolCallsInfo.length > 0 ? toolCallsInfo : undefined,
+    globeFocus,
   };
 }

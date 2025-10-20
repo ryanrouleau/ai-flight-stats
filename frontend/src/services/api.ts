@@ -51,9 +51,16 @@ export interface ToolCall {
   result: unknown;
 }
 
+export interface ApiGlobeFocus {
+  mode: 'all' | 'flights' | 'airports';
+  flights?: Flight[];
+  airports?: Array<{ code: string; city?: string | null }>;
+}
+
 export interface ChatResponse {
   message: ChatMessage;
   toolCalls?: ToolCall[];
+  globeFocus?: ApiGlobeFocus;
 }
 
 export interface AuthStatus {

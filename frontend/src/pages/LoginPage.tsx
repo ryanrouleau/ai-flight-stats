@@ -33,7 +33,7 @@ export function LoginPage() {
           >
             <FlightTakeoffIcon sx={{ fontSize: 40, color: 'primary.main' }} />
             <Typography variant="h4" component="h1" fontWeight="bold">
-              AI Flight Stats
+              Flight Assistant
             </Typography>
           </Box>
 
