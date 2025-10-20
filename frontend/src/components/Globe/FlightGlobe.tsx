@@ -23,6 +23,24 @@ interface GlobeData {
   flights: FlightArc[];
 }
 
+export type GlobeFocus =
+  | { type: 'all' }
+  | { type: 'flights'; flights: Flight[] }
+  | { type: 'airports'; airportCodes: string[] };
+
+interface FlightGlobeProps {
+  focus?: GlobeFocus;
+  refreshTrigger?: number;
+}
+
+interface GlobeInstance {
+  controls: () => {
+    autoRotate: boolean;
+    autoRotateSpeed: number;
+  };
+  pointOfView: (view: { lat: number; lng: number; altitude: number }) => void;
+}
+
 // Transform Flight[] into GlobeData
 function transformFlightsToGlobeData(flights: Flight[]): GlobeData {
   const airportMap = new Map<string, AirportPoint>();
@@ -80,9 +98,14 @@ function transformFlightsToGlobeData(flights: Flight[]): GlobeData {
   };
 }
 
-export function FlightGlobe() {
-  const globeEl = useRef<any>();
-  const [globeData, setGlobeData] = useState<GlobeData | null>(null);
+export function FlightGlobe({
+  focus = { type: 'all' },
+  refreshTrigger = 0,
+}: FlightGlobeProps) {
+  const globeEl = useRef<GlobeInstance | null>(null);
+  const [allFlights, setAllFlights] = useState<Flight[]>([]);
+  const [defaultGlobeData, setDefaultGlobeData] = useState<GlobeData | null>(null);
+  const [activeGlobeData, setActiveGlobeData] = useState<GlobeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAirport, setSelectedAirport] = useState<string | null>(null);
@@ -101,8 +124,10 @@ export function FlightGlobe() {
         setLoading(true);
         setError(null);
         const response = await apiClient.getFlights();
+        setAllFlights(response.flights);
         const transformedData = transformFlightsToGlobeData(response.flights);
-        setGlobeData(transformedData);
+        setDefaultGlobeData(transformedData);
+        setActiveGlobeData(transformedData);
       } catch (err) {
         console.error('Error fetching globe data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load globe data');
@@ -112,7 +137,7 @@ export function FlightGlobe() {
     };
 
     fetchGlobeData();
-  }, []);
+  }, [refreshTrigger]);
 
   // Measure container dimensions
   useEffect(() => {
@@ -147,12 +172,59 @@ export function FlightGlobe() {
     };
   }, []);
 
+  // Update active globe data based on external focus
+  useEffect(() => {
+    if (!defaultGlobeData) {
+      return;
+    }
+
+    if (!focus || focus.type === 'all') {
+      setActiveGlobeData(defaultGlobeData);
+      setSelectedAirport(null);
+      return;
+    }
+
+    if (focus.type === 'flights') {
+      setActiveGlobeData(transformFlightsToGlobeData(focus.flights));
+      setSelectedAirport(null);
+      return;
+    }
+
+    if (focus.type === 'airports') {
+      const codes = new Set(focus.airportCodes.map((code) => code.toUpperCase()));
+      const flightsForAirports = allFlights.filter(
+        (flight) =>
+          (flight.departure_airport && codes.has(flight.departure_airport.toUpperCase())) ||
+          (flight.arrival_airport && codes.has(flight.arrival_airport.toUpperCase()))
+      );
+
+      if (flightsForAirports.length > 0) {
+        setActiveGlobeData(transformFlightsToGlobeData(flightsForAirports));
+      } else {
+        const airportsOnly = defaultGlobeData.airports.filter((airport) =>
+          codes.has(airport.code.toUpperCase())
+        );
+        setActiveGlobeData({
+          airports: airportsOnly,
+          flights: [],
+        });
+      }
+
+      setSelectedAirport(null);
+    }
+  }, [focus, defaultGlobeData, allFlights]);
+
+  useEffect(() => {
+    setHoveredArc(null);
+    setHoveredPoint(null);
+  }, [activeGlobeData]);
+
   // Initialize globe view centered on the continental US without auto-rotation
   useEffect(() => {
     if (
       !hasInitializedView.current &&
       globeEl.current &&
-      globeData &&
+      defaultGlobeData &&
       dimensions.width > 0 &&
       dimensions.height > 0
     ) {
@@ -161,24 +233,34 @@ export function FlightGlobe() {
       globeEl.current.pointOfView({ lat: 38, lng: -97, altitude: 1.7 });
       hasInitializedView.current = true;
     }
-  }, [globeData, dimensions]);
+  }, [defaultGlobeData, dimensions]);
 
   // Filter flights by selected airport
-  const filteredFlights = selectedAirport && globeData
-    ? globeData.flights.filter(
+  const currentGlobeData = activeGlobeData;
+
+  const filteredFlights = selectedAirport && currentGlobeData
+    ? currentGlobeData.flights.filter(
         (flight) =>
-          globeData.airports.find(
+          currentGlobeData.airports.find(
             (a) => a.code === selectedAirport &&
             ((a.lat === flight.from.lat && a.lng === flight.from.lng) ||
              (a.lat === flight.to.lat && a.lng === flight.to.lng))
           )
       )
-    : globeData?.flights || [];
+    : currentGlobeData?.flights || [];
 
-  const handleAirportClick = (point: any) => {
+  const handleAirportClick = (point?: AirportPoint | null) => {
     if (point && point.code) {
       setSelectedAirport(point.code === selectedAirport ? null : point.code);
     }
+  };
+
+  const handlePointHover = (point?: AirportPoint | null) => {
+    setHoveredPoint(point ?? null);
+  };
+
+  const handleArcHover = (arc?: FlightArc | null) => {
+    setHoveredArc(arc ?? null);
   };
 
   const handleClearFilter = () => {
@@ -210,7 +292,16 @@ export function FlightGlobe() {
     );
   }
 
-  if (!globeData || globeData.airports.length === 0) {
+  const noDataAvailable =
+    !currentGlobeData ||
+    (currentGlobeData.airports.length === 0 && currentGlobeData.flights.length === 0);
+
+  if (noDataAvailable) {
+    const emptyMessage =
+      focus && focus.type !== 'all'
+        ? 'No flights match this request yet.'
+        : 'No flight data available. Scan your emails to get started!';
+
     return (
       <Box
         sx={{
@@ -223,7 +314,7 @@ export function FlightGlobe() {
         }}
       >
         <Typography variant="h6" color="text.secondary">
-          No flight data available. Scan your emails to get started!
+          {emptyMessage}
         </Typography>
       </Box>
     );
@@ -253,7 +344,7 @@ export function FlightGlobe() {
           <Chip
             label={`Filtered: ${selectedAirport}`}
             onDelete={handleClearFilter}
-            color="default"
+            color="primary"
             sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)' }}
           />
         </Box>
@@ -306,40 +397,40 @@ export function FlightGlobe() {
         backgroundColor="rgba(15, 23, 42, 1)"
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
         // Airports as points
-        pointsData={globeData.airports}
-        pointLat={(d: any) => d.lat}
-        pointLng={(d: any) => d.lng}
+        pointsData={currentGlobeData?.airports ?? []}
+        pointLat={(point: AirportPoint) => point.lat}
+        pointLng={(point: AirportPoint) => point.lng}
         pointAltitude={0.01}
-        pointRadius={(d: any) => Math.max(0.15, Math.min(0.5, d.count * 0.05))}
+        pointRadius={(point: AirportPoint) => Math.max(0.15, Math.min(0.5, point.count * 0.05))}
         pointColor={() => '#ff6b6b'}
-        pointLabel={(d: any) => `
+        pointLabel={(point: AirportPoint) => `
           <div style="background: rgba(0,0,0,0.8); padding: 8px; border-radius: 4px; color: white;">
-            <strong>${d.code}</strong><br/>
-            ${d.city}<br/>
-            ${d.count} flight${d.count !== 1 ? 's' : ''}
+            <strong>${point.code}</strong><br/>
+            ${point.city}<br/>
+            ${point.count} flight${point.count !== 1 ? 's' : ''}
           </div>
         `}
         onPointClick={handleAirportClick}
-        onPointHover={(point: any) => setHoveredPoint(point)}
+        onPointHover={handlePointHover}
         // Flight paths as arcs
         arcsData={filteredFlights}
-        arcStartLat={(d: any) => d.from.lat}
-        arcStartLng={(d: any) => d.from.lng}
-        arcEndLat={(d: any) => d.to.lat}
-        arcEndLng={(d: any) => d.to.lng}
+        arcStartLat={(arc: FlightArc) => arc.from.lat}
+        arcStartLng={(arc: FlightArc) => arc.from.lng}
+        arcEndLat={(arc: FlightArc) => arc.to.lat}
+        arcEndLng={(arc: FlightArc) => arc.to.lng}
         arcColor={() => ['rgba(100, 200, 255, 0.5)', 'rgba(255, 150, 100, 0.5)']}
         arcDashLength={0.4}
         arcDashGap={0.2}
         arcDashAnimateTime={2000}
         arcStroke={0.5}
         arcAltitudeAutoScale={0.3}
-        arcLabel={(d: any) => `
+        arcLabel={(arc: FlightArc) => `
           <div style="background: rgba(0,0,0,0.8); padding: 8px; border-radius: 4px; color: white;">
-            ${d.airline ? `<strong>${d.airline}</strong><br/>` : ''}
-            ${new Date(d.date).toLocaleDateString()}
+            ${arc.airline ? `<strong>${arc.airline}</strong><br/>` : ''}
+            ${new Date(arc.date).toLocaleDateString()}
           </div>
         `}
-        onArcHover={(arc: any) => setHoveredArc(arc)}
+        onArcHover={handleArcHover}
         arcsTransitionDuration={1000}
       />
 

@@ -45,8 +45,15 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ToolCall {
+  tool: string;
+  arguments: Record<string, unknown>;
+  result: unknown;
+}
+
 export interface ChatResponse {
   message: ChatMessage;
+  toolCalls?: ToolCall[];
 }
 
 export interface AuthStatus {

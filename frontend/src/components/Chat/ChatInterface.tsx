@@ -12,9 +12,14 @@ import {
 import EmailIcon from '@mui/icons-material/Email';
 import { ChatInput } from './ChatInput';
 import { MessageList } from './MessageList';
-import { apiClient, type ChatMessage } from '../../services/api';
+import { apiClient, type ChatMessage, type ChatResponse } from '../../services/api';
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  onChatResponse?: (response: ChatResponse) => void;
+  onScanComplete?: () => void;
+}
+
+export function ChatInterface({ onChatResponse, onScanComplete }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
@@ -34,6 +39,7 @@ export function ChatInterface() {
     try {
       const response = await apiClient.sendChatMessage(message, messages);
       setMessages((prev) => [...prev, response.message]);
+      onChatResponse?.(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       // Remove the user message if request failed
@@ -57,6 +63,7 @@ export function ChatInterface() {
         content: `Email scan complete! I found and parsed ${response.count} flight confirmations. You can now ask me questions about your flights.`,
       };
       setMessages((prev) => [...prev, systemMessage]);
+      onScanComplete?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan emails');
     } finally {
