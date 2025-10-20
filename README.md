@@ -86,14 +86,67 @@ Open `http://localhost:5173` → Login with Google → Scan Emails → Ask quest
 - **3D globe:** Interactive visualization of airports visited and flight paths
 - **Auto-highlighting:** Chat responses focus the globe on relevant flights
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Frontend (React)                              │
+│  ┌─────────────────┐                        ┌──────────────────────┐   │
+│  │  DashboardPage  │                        │    AuthContext       │   │
+│  │  ┌───────────┐  │                        │  (OAuth Flow)        │   │
+│  │  │ChatInterface│ │◄──────────────────────┤                      │   │
+│  │  └───────────┘  │                        └──────────────────────┘   │
+│  │        │         │                                 │                 │
+│  │  ┌─────▼──────┐ │                                 │                 │
+│  │  │FlightGlobe │ │◄────Globe Focus                 │                 │
+│  │  │(3D Viz)    │ │                                 │                 │
+│  │  └────────────┘ │                                 │                 │
+│  └─────────────────┘                                 │                 │
+└────────────┬─────────────────────────────────────────┼─────────────────┘
+             │ HTTP/REST                               │
+             │                                         │
+┌────────────▼─────────────────────────────────────────▼─────────────────┐
+│                      Backend (Express + Node.js)                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
+│  │Auth      │  │Flights   │  │Chat      │  │Health    │              │
+│  │Routes    │  │Routes    │  │Routes    │  │Check     │              │
+│  └─────┬────┘  └────┬─────┘  └────┬─────┘  └──────────┘              │
+│        │            │              │                                   │
+│  ┌─────▼──────┬─────▼──────┬──────▼─────┬──────────┬──────────┐      │
+│  │Gmail       │Parser      │Chat        │Flight    │Airport   │      │
+│  │Service     │Service     │Service     │Tools     │Service   │      │
+│  │            │            │            │          │          │      │
+│  │• OAuth     │• HTML→Text │• GPT-5     │• Query   │• IATA    │      │
+│  │• Search    │• GPT-5     │• Function  │  Helpers │  Lookup  │      │
+│  │• Fetch     │• Extract   │  Calling   │• Filter  │• Coords  │      │
+│  └────┬───────┴─────┬──────┴──────┬─────┴────┬─────┴──────────┘      │
+│       │             │             │          │                        │
+│       │             └─────────────┼──────────┘                        │
+│       │                           │                                   │
+│  ┌────▼───────────────────────────▼────────────┐                      │
+│  │         Database Service (SQLite)           │                      │
+│  │  • flights table                            │                      │
+│  │  • Deduplication logic                      │                      │
+│  │  • Query methods                            │                      │
+│  └─────────────────────────────────────────────┘                      │
+└────────────┬──────────────────────┬─────────────────────────────────┬─┘
+             │                      │                                 │
+┌────────────▼─────┐   ┌────────────▼─────────┐   ┌─────────────────▼──┐
+│  Gmail API       │   │   OpenAI API         │   │  Airport Dataset   │
+│  (Email Fetch)   │   │   • GPT-5-mini       │   │  (Static JSON)     │
+│                  │   │   • Parsing          │   │                    │
+│                  │   │   • Chat + Tools     │   │                    │
+└──────────────────┘   └──────────────────────┘   └────────────────────┘
+```
+
 ## How It Works
 
-1. OAuth flow gets access to your Gmail
-2. Searches for flight confirmation emails
-3. Sends emails to GPT with strict schemas to extract: dates, airports, airlines, flight numbers, passenger names
-4. Stores everything in SQLite with airport coordinates
-5. Chat uses GPT function calling to query your flight database
-6. Results displayed as text + highlighted on the globe
+1. **OAuth flow** gets access to your Gmail
+2. **Scan emails**: Searches for flight confirmation emails via Gmail API
+3. **Extract data**: GPT-5-mini parses emails with strict schemas to extract dates, airports, airlines, flight numbers, passenger names
+4. **Store**: Saves flight data to SQLite with airport coordinates from static dataset
+5. **Chat**: User asks natural language questions → GPT function calling → Database queries → Structured response
+6. **Visualize**: Chat responses include globe focus instructions → Frontend highlights relevant flights/airports on 3D globe
 
 ## Project Structure
 
