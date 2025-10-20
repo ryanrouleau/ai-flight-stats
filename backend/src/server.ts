@@ -2,12 +2,17 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+// Import express-async-errors to automatically catch async errors
+import 'express-async-errors';
+
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import { initializeDatabase } from './services/db.service';
 import { airportService } from './services/airport.service';
+import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 import authRoutes from './routes/auth.routes';
+import flightsRoutes from './routes/flights.routes';
 import chatRoutes from './routes/chat.routes';
 
 // Initialize database
@@ -44,8 +49,12 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/auth', authRoutes);
-// app.use('/flights', flightsRoutes);
+app.use('/flights', flightsRoutes);
 app.use('/chat', chatRoutes);
+
+// Error handling (must be last)
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
