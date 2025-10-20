@@ -92,6 +92,28 @@ export const flightTools: ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'getEmailBodies',
+      description: 'Retrieve the full email bodies for specific flight confirmation emails.',
+      parameters: {
+        type: 'object',
+        properties: {
+          emailMessageIds: {
+            type: 'array',
+            description: 'List of Gmail message IDs to retrieve the raw email bodies for.',
+            items: {
+              type: 'string',
+            },
+            minItems: 1,
+          },
+        },
+        required: ['emailMessageIds'],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 /**
@@ -102,7 +124,8 @@ export type ToolName =
   | 'getAirportVisits'
   | 'getTotalFlights'
   | 'getFlightsByAirport'
-  | 'getAirlineStats';
+  | 'getAirlineStats'
+  | 'getEmailBodies';
 
 /**
  * Type for tool call arguments
@@ -122,4 +145,7 @@ export interface ToolArguments {
     airportCode: string;
   };
   getAirlineStats: Record<string, never>;
+  getEmailBodies: {
+    emailMessageIds: string[];
+  };
 }

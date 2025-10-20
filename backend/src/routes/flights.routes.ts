@@ -1,10 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth.middleware';
 import { gmailService } from '../services/gmail.service';
-import { parseFlightEmails, type EmailInput } from '../services/parser.service';
+import { parseFlightEmail, type EmailInput } from '../services/parser.service';
 import {
   createFlight,
   getFlightsByUser,
+  findExactDuplicate,
+  findFlightChange,
+  deleteFlight,
   type Flight,
 } from '../services/db.service';
 
@@ -58,14 +61,28 @@ router.post('/scan', requireAuth, async (req: Request, res: Response) => {
       })
     );
 
-    // Parse flights from emails using OpenAI
-    const parsedFlights = await parseFlightEmails(emailInputs);
+    const parseEmailSentDate = (value?: string | null): number | undefined => {
+      if (!value) {
+        return undefined;
+      }
+      const timestamp = Date.parse(value);
+      return Number.isNaN(timestamp) ? undefined : timestamp;
+    };
 
     // Store flights in database
     const savedFlights: Flight[] = [];
-    for (const flight of parsedFlights) {
-      try {
-        const savedFlight = createFlight({
+    let parsedCount = 0;
+
+    for (const emailInput of emailInputs) {
+      const flightsFromEmail = await parseFlightEmail(emailInput);
+      parsedCount += flightsFromEmail.length;
+
+      for (const flight of flightsFromEmail) {
+        const passengerNames = flight.passengerNames
+          ? JSON.stringify(flight.passengerNames)
+          : undefined;
+
+        const flightRecord: Flight = {
           user_email: userEmail,
           confirmation_number: flight.confirmationNumber,
           flight_date: flight.flightDate,
@@ -78,35 +95,80 @@ router.post('/scan', requireAuth, async (req: Request, res: Response) => {
           airline: flight.airline,
           flight_number: flight.flightNumber,
           cabin: flight.cabin,
-          passenger_names: flight.passengerNames
-            ? JSON.stringify(flight.passengerNames)
-            : undefined,
+          passenger_names: passengerNames,
           notes: flight.notes,
           departure_lat: flight.departureLat,
           departure_lng: flight.departureLng,
           arrival_lat: flight.arrivalLat,
           arrival_lng: flight.arrivalLng,
-          raw_email_content: emailInputs.find((e) =>
-            e.content.includes(flight.confirmationNumber || '')
-          )?.content,
-        });
-        savedFlights.push(savedFlight);
-      } catch (error: any) {
-        // Skip duplicates (unique constraint violations)
-        if (error.message?.includes('UNIQUE constraint failed')) {
+          email_message_id: flight.emailMessageId,
+          email_sent_date: flight.emailSentDate,
+          email_subject: flight.emailSubject,
+          raw_email_content: flight.rawEmailContent,
+        };
+
+        const exactDuplicate = findExactDuplicate(flightRecord);
+        if (exactDuplicate) {
           console.log(
-            `⚠️  Duplicate flight skipped: ${flight.departureAirport} → ${flight.arrivalAirport} on ${flight.flightDate}`
+            `⚠️  Duplicate flight skipped: ${flightRecord.departure_airport} → ${flightRecord.arrival_airport} on ${flightRecord.flight_date}`
           );
-        } else {
-          console.error('Error saving flight:', error);
+          continue;
+        }
+
+        const existingFlights = findFlightChange(flightRecord);
+        if (existingFlights.length > 0) {
+          console.log(
+            `🔄 Flight change detected for ${flightRecord.departure_airport} → ${flightRecord.arrival_airport} (${flightRecord.flight_number ?? 'unknown'})`
+          );
+
+          const newTimestamp = parseEmailSentDate(flightRecord.email_sent_date);
+          const existingTimestamps = existingFlights
+            .map(f => parseEmailSentDate(f.email_sent_date))
+            .filter((value): value is number => value !== undefined);
+
+          const shouldReplace =
+            newTimestamp !== undefined
+              ? existingTimestamps.length === 0 ||
+                newTimestamp > Math.max(...existingTimestamps)
+              : existingTimestamps.length === 0;
+
+          if (shouldReplace) {
+            for (const existing of existingFlights) {
+              if (existing.id) {
+                deleteFlight(existing.id);
+                console.log(
+                  `  🗑️  Removed outdated flight (${existing.flight_date}) with ID ${existing.id}`
+                );
+              }
+            }
+          } else {
+            console.log(
+              `  ⏭️  Skipped new flight from email dated ${flightRecord.email_sent_date ?? 'unknown'}`
+            );
+            continue;
+          }
+        }
+
+        try {
+          const savedFlight = createFlight(flightRecord);
+          savedFlights.push(savedFlight);
+        } catch (error: any) {
+          // Skip duplicates (unique constraint violations)
+          if (error.message?.includes('UNIQUE constraint failed')) {
+            console.log(
+              `⚠️  Duplicate flight skipped: ${flight.departureAirport} → ${flight.arrivalAirport} on ${flight.flightDate}`
+            );
+          } else {
+            console.error('Error saving flight:', error);
+          }
         }
       }
     }
 
     return res.json({
-      message: `Successfully scanned ${gmailMessages.length} emails and parsed ${parsedFlights.length} flights`,
+      message: `Successfully scanned ${gmailMessages.length} emails and parsed ${parsedCount} flights`,
       scanned: gmailMessages.length,
-      parsed: parsedFlights.length,
+      parsed: parsedCount,
       saved: savedFlights.length,
       flights: savedFlights,
     });

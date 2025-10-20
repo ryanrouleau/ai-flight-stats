@@ -29,7 +29,19 @@ CREATE TABLE IF NOT EXISTS flights (
   departure_lng REAL,
   arrival_lat REAL,
   arrival_lng REAL,
+  email_message_id TEXT,
+  email_sent_date TEXT,
+  email_subject TEXT,
   raw_email_content TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_email) REFERENCES users(email)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS flights_unique_key ON flights(
+  user_email,
+  confirmation_number,
+  flight_date,
+  departure_airport,
+  arrival_airport,
+  flight_number
 );

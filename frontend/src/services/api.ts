@@ -17,6 +17,9 @@ export interface Flight {
   departure_lng?: number;
   arrival_lat?: number;
   arrival_lng?: number;
+  email_message_id?: string;
+  email_sent_date?: string;
+  email_subject?: string;
   raw_email_content?: string;
   created_at: string;
 }

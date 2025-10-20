@@ -89,6 +89,7 @@ export function FlightGlobe() {
   const [hoveredPoint, setHoveredPoint] = useState<AirportPoint | null>(null);
   const [hoveredArc, setHoveredArc] = useState<FlightArc | null>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const hasInitializedView = useRef(false);
 
   // Container ref to measure dimensions
   const containerRef = useRef<HTMLDivElement>(null);
@@ -146,13 +147,21 @@ export function FlightGlobe() {
     };
   }, []);
 
-  // Auto-rotate globe
+  // Initialize globe view centered on the continental US without auto-rotation
   useEffect(() => {
-    if (globeEl.current) {
-      globeEl.current.controls().autoRotate = true;
-      globeEl.current.controls().autoRotateSpeed = 0.5;
+    if (
+      !hasInitializedView.current &&
+      globeEl.current &&
+      globeData &&
+      dimensions.width > 0 &&
+      dimensions.height > 0
+    ) {
+      const controls = globeEl.current.controls();
+      controls.autoRotate = false;
+      globeEl.current.pointOfView({ lat: 38, lng: -97, altitude: 1.7 });
+      hasInitializedView.current = true;
     }
-  }, [globeData]);
+  }, [globeData, dimensions]);
 
   // Filter flights by selected airport
   const filteredFlights = selectedAirport && globeData
@@ -226,7 +235,7 @@ export function FlightGlobe() {
       sx={{
         height: '100%',
         position: 'relative',
-        bgcolor: '#000',
+        bgcolor: '#0f172a',
         borderRadius: 2,
         overflow: 'hidden',
       }}
@@ -244,7 +253,7 @@ export function FlightGlobe() {
           <Chip
             label={`Filtered: ${selectedAirport}`}
             onDelete={handleClearFilter}
-            color="primary"
+            color="default"
             sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)' }}
           />
         </Box>
@@ -294,7 +303,7 @@ export function FlightGlobe() {
         ref={globeEl}
         width={dimensions.width}
         height={dimensions.height}
-        backgroundColor="rgba(0,0,0,0)"
+        backgroundColor="rgba(15, 23, 42, 1)"
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
         // Airports as points
         pointsData={globeData.airports}

@@ -68,6 +68,10 @@ export interface ParsedFlight {
   departureLng?: number;
   arrivalLat?: number;
   arrivalLng?: number;
+  emailMessageId?: string;
+  emailSentDate?: string;
+  emailSubject?: string;
+  rawEmailContent?: string;
 }
 
 export interface EmailInput {
@@ -174,19 +178,6 @@ function normalizeFlight(
 }
 
 /**
- * Generate a deterministic deduplication key for a flight
- */
-function getFlightKey(f: ParsedFlight): string {
-  return [
-    f.confirmationNumber ?? '',
-    f.flightDate,
-    f.departureAirport,
-    f.arrivalAirport,
-    f.flightNumber ?? '',
-  ].join('|');
-}
-
-/**
  * Parse flight information from email content using OpenAI Structured Outputs
  */
 export async function parseFlightEmail(email: EmailInput): Promise<ParsedFlight[]> {
@@ -244,14 +235,27 @@ Extract all flight information from this email.`;
       .map(normalizeFlight)
       .filter((f): f is ParsedFlight => f !== null);
 
+    const metadata = parsed.emailMetadata ?? null;
+    const messageId = metadata?.messageId ?? email.id ?? null;
+    const subject = metadata?.subject ?? email.subject ?? null;
+    const sentDate = metadata?.sentDate ?? email.sentDate ?? null;
+
+    const enrichedFlights = normalized.map(flight => ({
+      ...flight,
+      emailMessageId: messageId ?? undefined,
+      emailSubject: subject ?? undefined,
+      emailSentDate: sentDate ?? undefined,
+      rawEmailContent: email.content,
+    }));
+
     // Log parsed flights
-    for (const flight of normalized) {
+    for (const flight of enrichedFlights) {
       console.log(
         `✅ Parsed: ${flight.departureAirport} → ${flight.arrivalAirport} on ${flight.flightDate}${flight.flightNumber ? ` (${flight.flightNumber})` : ''}`
       );
     }
 
-    return normalized;
+    return enrichedFlights;
   } catch (error) {
     console.error(`❌ Error parsing email ${email.id}:`, error);
     return [];
@@ -313,25 +317,9 @@ export async function parseFlightEmails(emails: EmailInput[]): Promise<ParsedFli
 
   const allFlights = flightsArrays.flat();
 
-  // Deduplicate flights
-  const seen = new Set<string>();
-  const dedupedFlights: ParsedFlight[] = [];
-
-  for (const flight of allFlights) {
-    const key = getFlightKey(flight);
-    if (!seen.has(key)) {
-      dedupedFlights.push(flight);
-      seen.add(key);
-    } else {
-      console.log(
-        `🔄 Duplicate removed: ${flight.departureAirport} → ${flight.arrivalAirport} on ${flight.flightDate}`
-      );
-    }
-  }
-
   console.log(
-    `\n✅ Successfully parsed ${dedupedFlights.length} unique flight segments from ${emails.length} emails (${allFlights.length - dedupedFlights.length} duplicates removed)\n`
+    `\n✅ Successfully parsed ${allFlights.length} flight segments from ${emails.length} emails\n`
   );
 
-  return dedupedFlights;
+  return allFlights;
 }

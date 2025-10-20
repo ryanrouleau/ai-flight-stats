@@ -35,10 +35,30 @@ When displaying flight information:
 - Format routes as: Origin → Destination (CODE → CODE)
 - Always bold field labels like **Date:**, **Flight:**, **Route:**, **Times:**, **Cabin:**, **Confirmation:**, **Airline:** for easy scanning
 
+Flight tool notes:
+- Flight records returned from tools include \`email_message_id\` and \`emailMessageId\`. Use those identifiers in follow-up tool calls instead of asking the user.
+- When a user explicitly asks to see the original email content or attachments, call \`getEmailBodies\` with the relevant Gmail message IDs rather than asking the user to look them up.
+
 Today's date is ${new Date().toISOString().split('T')[0]}.
 
 ONLY offer follow ups that can be completed with the limited list of tools available.
 `
+
+type SanitizedFlight = Omit<db.Flight, 'raw_email_content'> & {
+  emailMessageId?: string;
+  emailSentDate?: string;
+  emailSubject?: string;
+};
+
+function sanitizeFlightRecord(flight: db.Flight): SanitizedFlight {
+  const { raw_email_content, ...safeFlight } = flight;
+  return {
+    ...safeFlight,
+    emailMessageId: flight.email_message_id ?? undefined,
+    emailSentDate: flight.email_sent_date ?? undefined,
+    emailSubject: flight.email_subject ?? undefined,
+  };
+}
 
 /**
  * Execute a tool function call
@@ -55,7 +75,7 @@ function executeTool(
       const { startDate, endDate } = args as ToolArguments['getFlightsByDateRange'];
       const flights = db.getFlightsByDateRange(userEmail, startDate, endDate);
       console.log(`   Found ${flights.length} flights between ${startDate} and ${endDate}`);
-      return flights;
+      return flights.map(sanitizeFlightRecord);
     }
 
     case 'getAirportVisits': {
@@ -76,13 +96,25 @@ function executeTool(
       const { airportCode } = args as ToolArguments['getFlightsByAirport'];
       const flights = db.getFlightsByAirport(userEmail, airportCode.toUpperCase());
       console.log(`   Found ${flights.length} flights for airport ${airportCode}`);
-      return flights;
+      return flights.map(sanitizeFlightRecord);
     }
 
     case 'getAirlineStats': {
       const stats = db.getAirlineStats(userEmail);
       console.log(`   Found stats for ${stats.length} airlines`);
       return stats;
+    }
+
+    case 'getEmailBodies': {
+      const { emailMessageIds } = args as ToolArguments['getEmailBodies'];
+      const emailBodies = db.getEmailBodies(userEmail, emailMessageIds).map(body => ({
+        ...body,
+        emailMessageId: body.email_message_id,
+        emailSubject: body.email_subject ?? undefined,
+        emailSentDate: body.email_sent_date ?? undefined,
+      }));
+      console.log(`   Returning ${emailBodies.length} email bodies`);
+      return emailBodies;
     }
 
     default:

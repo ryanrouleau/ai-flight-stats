@@ -81,9 +81,21 @@ function createTables(): void {
       departure_lng REAL,
       arrival_lat REAL,
       arrival_lng REAL,
+      email_message_id TEXT,
+      email_sent_date TEXT,
+      email_subject TEXT,
       raw_email_content TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_email) REFERENCES users(email)
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS flights_unique_key ON flights(
+      user_email,
+      confirmation_number,
+      flight_date,
+      departure_airport,
+      arrival_airport,
+      flight_number
     );
   `);
   console.log('✅ Tables created');
@@ -156,8 +168,18 @@ export interface Flight {
   departure_lng?: number;
   arrival_lat?: number;
   arrival_lng?: number;
+  email_message_id?: string;
+  email_sent_date?: string;
+  email_subject?: string;
   raw_email_content?: string;
   created_at?: string;
+}
+
+export interface EmailBody {
+  email_message_id: string;
+  email_subject?: string | null;
+  email_sent_date?: string | null;
+  raw_email_content?: string | null;
 }
 
 export function createFlight(flight: Flight): Flight {
@@ -168,8 +190,9 @@ export function createFlight(flight: Flight): Flight {
       departure_airport, arrival_airport, departure_city, arrival_city,
       airline, flight_number, cabin, passenger_names, notes,
       departure_lat, departure_lng, arrival_lat, arrival_lng,
+      email_message_id, email_sent_date, email_subject,
       raw_email_content
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const result = stmt.run(
@@ -191,10 +214,71 @@ export function createFlight(flight: Flight): Flight {
     flight.departure_lng || null,
     flight.arrival_lat || null,
     flight.arrival_lng || null,
+    flight.email_message_id || null,
+    flight.email_sent_date || null,
+    flight.email_subject || null,
     flight.raw_email_content || null
   );
 
   return getFlightById(result.lastInsertRowid as number)!;
+}
+
+export function findExactDuplicate(flight: Flight): Flight | undefined {
+  if (!flight.confirmation_number || !flight.flight_number) {
+    return undefined;
+  }
+
+  const stmt = getDb().prepare(`
+    SELECT *
+    FROM flights
+    WHERE user_email = ?
+      AND confirmation_number = ?
+      AND flight_date = ?
+      AND departure_airport = ?
+      AND arrival_airport = ?
+      AND flight_number = ?
+    LIMIT 1
+  `);
+
+  return stmt.get(
+    flight.user_email,
+    flight.confirmation_number,
+    flight.flight_date,
+    flight.departure_airport,
+    flight.arrival_airport,
+    flight.flight_number
+  ) as Flight | undefined;
+}
+
+export function findFlightChange(flight: Flight): Flight[] {
+  if (!flight.confirmation_number || !flight.flight_number) {
+    return [];
+  }
+
+  const stmt = getDb().prepare(`
+    SELECT *
+    FROM flights
+    WHERE user_email = ?
+      AND confirmation_number = ?
+      AND departure_airport = ?
+      AND arrival_airport = ?
+      AND flight_number = ?
+      AND flight_date != ?
+  `);
+
+  return stmt.all(
+    flight.user_email,
+    flight.confirmation_number,
+    flight.departure_airport,
+    flight.arrival_airport,
+    flight.flight_number,
+    flight.flight_date
+  ) as Flight[];
+}
+
+export function deleteFlight(id: number): void {
+  const stmt = getDb().prepare('DELETE FROM flights WHERE id = ?');
+  stmt.run(id);
 }
 
 export function getFlightById(id: number): Flight | undefined {
@@ -272,6 +356,36 @@ export function getAirlineStats(userEmail: string): any[] {
     ORDER BY count DESC
   `);
   return stmt.all(userEmail) as any[];
+}
+
+export function getEmailBodies(userEmail: string, emailMessageIds: string[]): EmailBody[] {
+  const uniqueIds = Array.from(
+    new Set(
+      emailMessageIds
+        .map(id => id?.trim())
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = uniqueIds.map(() => '?').join(', ');
+  const stmt = getDb().prepare(`
+    SELECT email_message_id, email_subject, email_sent_date, raw_email_content
+    FROM flights
+    WHERE user_email = ?
+      AND email_message_id IS NOT NULL
+      AND email_message_id IN (${placeholders})
+  `);
+
+  const rows = stmt.all(userEmail, ...uniqueIds) as EmailBody[];
+  const rowsById = new Map(rows.map(row => [row.email_message_id, row]));
+
+  return uniqueIds
+    .map(id => rowsById.get(id))
+    .filter((row): row is EmailBody => Boolean(row));
 }
 
 // Export database getter for custom queries if needed
