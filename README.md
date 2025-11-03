@@ -1,8 +1,29 @@
 # AI Flight Stats
 
-Scan your Gmail for flight confirmations, let GPT extract the flight data, then explore your travel history through chat and a 3D globe.
+Login via Google, click "Scan Emails" to search for flight confirmations, AI will extract the flight data and store in a structured format, then explore your travel history through chat and an interactive 3D globe that reacts to your messages.
 
 Ask questions like "How many flights did I take last year?" or "Show me all my United flights" and watch the globe light up with your answer.
+
+## Examples
+
+### Dashboard Overview
+![Dashboard with 3D Globe](screenshots/dashboard-overview.png)
+*Interactive 3D globe showing all flight paths and airports for logged in user after email scanning*
+
+### Natural Language Chat
+![Chat Interface Example](screenshots/chat-example.png)
+
+### Filtering by Origin
+![NYC Flights Query](screenshots/nyc-flights.png)
+*"Show me flights from NYC" - Globe automatically highlights matching routes*
+
+### Airline Statistics
+![Airline Breakdown](screenshots/airline-stats.png)
+*Get detailed statistics broken down by airline*
+
+### Geographic Queries
+![South America Flights](screenshots/south-america-flights.png)
+*"Display my flights to/from South America" - Globe focuses on the region*
 
 ## ⚠️ Vibe Coding Alert
 
